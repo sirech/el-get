@@ -176,6 +176,30 @@ directory or a symlink in el-get-dir."
 
 
 ;;
+;; el-get-reload API functions
+;;
+(defun el-get-package-files (package)
+  "Return a list of files loaded from PACKAGE's directory."
+  (loop with pdir = (file-truename (el-get-package-directory package))
+        with regexp = (format "^%s" (regexp-quote (file-name-as-directory (expand-file-name pdir))))
+        for (f . nil) in load-history
+        when (and (stringp f) (string-match-p regexp (file-truename f)))
+        collect (if (string-match-p "\\.elc?$" f)
+                    (file-name-sans-extension f)
+                  f)))
+
+(defun el-get-package-features (package)
+  "Return a list of features provided by files in PACKAGE."
+  (loop with pdir = (file-truename (el-get-package-directory package))
+        with regexp = (format "^%s" (regexp-quote (file-name-as-directory (expand-file-name pdir))))
+        for (f . l) in load-history
+        when (and (stringp f) (string-match-p regexp (file-truename f)))
+        nconc (loop for i in l
+                    when (and (consp i) (eq (car i) 'provide))
+                    collect (cdr i))))
+
+
+;;
 ;; call-process-list utility
 ;;
 (defun el-get-start-process-list-sentinel (proc change)

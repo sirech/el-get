@@ -39,6 +39,7 @@
 ;;   - deprecate package.el from the old days, only include the Emacs24 one
 ;;   - implement :builtin property (useful for dealing with package.el)
 ;;   - fix recipes :build commands, must be either lists of strings or expr
+;;   - add support for el-get-reload and do that at update time
 ;;
 ;;  3.1 - 2011-09-15 - Get a fix
 ;;
@@ -156,7 +157,7 @@
 (defgroup el-get nil "el-get customization group"
   :group 'convenience)
 
-(defconst el-get-version "4.0.3" "el-get version number")
+(defconst el-get-version "4.0.5" "el-get version number")
 
 (defconst el-get-script (or load-file-name buffer-file-name))
 
@@ -271,6 +272,7 @@ force their evaluation on some packages only."
 ;;
 ;; User Interface, Interactive part
 ;;
+;;;###autoload
 (defun el-get-version ()
   "Message the current el-get version"
   (interactive)
@@ -463,9 +465,9 @@ PACKAGE may be either a string or the corresponding symbol."
   (let ((package (pop el-get-next-packages)))
     (el-get-verbose-message "el-get-install-next-packages: %s" package)
     (if package
-	(if (el-get-package-is-installed package)
-	    (message "el-get: `%s' package is already installed" package)
-	  (el-get-do-install (el-get-as-string package)))
+	;; el-get-do-install will either init the package, installing it
+	;; first only when necessary to do so
+	(el-get-do-install (el-get-as-string package))
       ;; no more packages to install in the dependency walk, clean up
       (remove-hook 'el-get-post-init-hooks 'el-get-install-next-packages))))
 
@@ -515,6 +517,45 @@ PACKAGE may be either a string or the corresponding symbol."
       (funcall install package url 'el-get-post-install)
       (message "el-get install %s" package))))
 
+(defun el-get-reload (package)
+  "Reload PACKAGE."
+  (interactive
+   (list (el-get-read-package-with-status "Update" "installed")))
+  (el-get-verbose-message "el-get-reload: %s" package)
+  (let* ((all-features features)
+         (package-features (el-get-package-features package))
+         (package-files (el-get-package-files package))
+         (other-features
+	  (remove-if (lambda (x) (memq x package-features)) all-features)))
+    (unwind-protect
+        (progn
+          ;; We cannot let-bind `features' here, becauses the changes
+          ;; made by `el-get-init' must persist.
+          (setq features other-features)
+          ;; Reload all loaded files in package dir if they still
+          ;; exist.
+          (loop for file in package-files
+                do (load file 'noerror))
+          ;; Redo package initialization
+          (el-get-init package)
+          ;; Reload all features provided by the package. This ensures
+          ;; that autoloaded packages (which normally don't load
+          ;; anything until one of their entry points is called) are
+          ;; forced to reload immediately if they were already loaded.
+          (loop for f in package-features
+                do (require f nil 'noerror)))
+      ;; We have to add all the removed features back in no matter
+      ;; what, or else we would be lying about what has been loaded.
+      ;; This covers the corner case where an updated package no
+      ;; longer provides a certain feature. Technically that feature
+      ;; is still provided, so not adding it back would be wrong.
+      (let ((missing-features
+             (remove-if (lambda (x) (memq x features)) package-features)))
+        (when missing-features
+          (warn "Adding %S back onto features, because the reloaded package did not provide them."
+                missing-features)
+          (setq features (append missing-features features)))))))
+
 
 (defun el-get-post-update (package)
   "Post update PACKAGE. This will get run by a sentinel."
@@ -526,6 +567,7 @@ PACKAGE may be either a string or the corresponding symbol."
 		    ;; fix trailing failed installs
 		    (when (string= (el-get-read-package-status package) "required")
 		      (el-get-save-package-status package "installed"))
+                    (el-get-reload package)
                     (run-hook-with-args 'el-get-post-update-hooks package)))))
 
 (defun el-get-update (package)
@@ -542,11 +584,13 @@ PACKAGE may be either a string or the corresponding symbol."
     (funcall update package url 'el-get-post-update)
     (message "el-get update %s" package)))
 
+;;;###autoload
 (defun el-get-update-all ()
   "Performs update of all installed packages."
   (interactive)
   (mapc 'el-get-update (el-get-list-package-names-with-status "installed")))
 
+;;;###autoload
 (defun el-get-self-update ()
   "Update el-get itself.  The standard recipe takes care of reloading the code."
   (interactive)
@@ -578,6 +622,7 @@ PACKAGE may be either a string or the corresponding symbol."
     (el-get-save-package-status package "removed")
     (message "el-get remove %s" package)))
 
+;;;###autoload
 (defun el-get-cd (package)
   "Open dired in the package directory."
   (interactive
@@ -596,6 +641,7 @@ PACKAGE may be either a string or the corresponding symbol."
       (with-temp-file filepath
 	(insert (prin1-to-string source))))))
 
+;;;###autoload
 (defun el-get-make-recipes (&optional dir)
   "Loop over `el-get-sources' and write a recipe file for each
 entry which is not a symbol and is not already a known recipe."
@@ -707,7 +753,10 @@ already installed packages is considered."
           ;; don't forget to account for installation failure
           (setq installed (el-get-count-packages-with-status packages "installed" "required"))
           (progress-reporter-update progress (- total installed)))
-        (progress-reporter-done progress)))))
+        (progress-reporter-done progress))
+
+      ;; now is a good time to care about autoloads
+      (el-get-eval-autoloads))))
 
 (provide 'el-get)
 
