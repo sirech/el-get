@@ -36,16 +36,17 @@
 
 The methods list is a PLIST, each entry has a method name
 property which value is another PLIST, which must contain values
-for :install, :install-hook, :update and :remove
+for :install, :install-hook, :update, :remove and :checksum
 properties. Those should be the elisp functions to call for doing
 the named package action in the given method.")
 
 (defun el-get-register-method (name install update remove
-				    &optional install-hook remove-hook)
+				    &optional install-hook remove-hook compute-checksum)
   "Register the method for backend NAME, with given functions"
   (let ((def (list :install install :update update :remove remove)))
-    (when install-hook (setq def (append def (list :install-hook install-hook))))
-    (when remove-hook  (setq def (append def (list :remove-hook remove-hook))))
+    (when install-hook     (setq def (append def (list :install-hook install-hook))))
+    (when remove-hook      (setq def (append def (list :remove-hook remove-hook))))
+    (when compute-checksum (setq def (append def (list :compute-checksum compute-checksum))))
     (setq el-get-methods (plist-put el-get-methods name def))))
 
 
@@ -93,21 +94,15 @@ entry."
 ;;
 ;; Common support bits
 ;;
-(defun el-get-rmdir (package url post-remove-fun)
-  "Just rm -rf the package directory. Follow symlinks."
-  (let* ((source   (el-get-package-def package))
-	 (method   (el-get-package-method source))
-	 (pdir (el-get-package-directory package)))
-    (if (eq method 'elpa)
-	;; only remove a symlink here
-	(when (or (file-symlink-p (directory-file-name pdir))
-                  (file-exists-p pdir))
-	  (delete-file (directory-file-name pdir)))
-      ;; non ELPA packages, remove the directory
-      (if (file-exists-p pdir)
-	  (dired-delete-file pdir 'always)
-	(message "el-get could not find package directory \"%s\"" pdir))
-      (funcall post-remove-fun package))))
+(defun el-get-rmdir (package &rest ignored)
+  "Just rm -rf the package directory. If it is a symlink, delete it."
+  (let* ((pdir (el-get-package-directory package)))
+    (cond ((file-symlink-p pdir)
+           (delete-file pdir))
+          ((file-directory-p pdir)
+           (delete-directory pdir 'recursive))
+          ((file-exists-p pdir)
+           (delete-file pdir)))))
 
 
 ;;
@@ -399,4 +394,3 @@ out if it's nil."
 	command)))))
 
 (provide 'el-get-core)
-
