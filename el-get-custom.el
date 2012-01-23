@@ -77,7 +77,7 @@ definition provided by `el-get' recipes locally.
 
     The name of the package. It can be different from the name of
     the directory where the package is stored (after a `git
-    clone' for example, in which case a symlink will be created.
+    clone' for example), in which case a symlink will be created.
 
 :depends
 
@@ -104,7 +104,7 @@ definition provided by `el-get' recipes locally.
     The type of the package, currently el-get offers support for
     `apt-get', `elpa', `git', `emacsmirror', `git-svn', `bzr' `svn',
     `cvs', `darcs', `fink', `ftp', `emacswiki', `http-tar', `pacman',
-    `hg' and `http'. You can easily support your own types here, 
+    `hg' and `http'. You can easily support your own types here,
     see the variable `el-get-methods'.
 
 :branch
@@ -269,8 +269,23 @@ definition provided by `el-get' recipes locally.
 
     A short description of the project.
 
-"
+:checksum
 
+    Some methods in el-get download files that are not so
+    trusted (e.g. anyone is allowed to modify emacswiki anytime).
+    For these cases you can set up a checksum value for a
+    package, so you will notice if el-get tries to install a
+    version that you haven't seen before.  The installation will
+    simply fail and you will see the good and bad checksum values
+    in `*Messages*'.  To get the checksum value for a package
+    initially, install the package while `el-get-verbose' is on.
+
+    Checksum calculation is currently supported by these methods
+    with the following meaning:
+
+      * `http', `ftp' and `emacswiki' with the SHA1 of the downloaded file
+"
+  :group 'el-get
   :type
   `(repeat
     (choice
