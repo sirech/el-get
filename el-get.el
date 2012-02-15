@@ -47,6 +47,8 @@
 ;;   - add support for el-get-reload and do that at update time
 ;;   - implement :checksum property for http kinds of files
 ;;   - Add new command el-get-reinstall
+;;   - implement :checkout property for git packages
+;;   - implement :shallow property for git packages
 ;;
 ;;  3.1 - 2011-09-15 - Get a fix
 ;;
@@ -373,7 +375,8 @@ called by `el-get' (usually at startup) for each installed package."
              (after    (plist-get source :after))
              (pkgname  (plist-get source :pkgname))
              (library  (or (plist-get source :library) pkgname package))
-             (pdir     (el-get-package-directory package)))
+             (pdir     (el-get-package-directory package))
+             (default-directory pdir))
 
 	;; a builtin package initialisation is about calling recipe and user
 	;; code only, no load-path nor byte-compiling support needed here.
