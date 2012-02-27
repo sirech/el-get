@@ -1,3 +1,4 @@
 (:name hideshow-org
-       :type git
-       :url "https://github.com/secelis/hideshow-org.git")
+       :description "Provides org-mode like hide and show for hideshow.el"
+       :type github
+       :pkgname "secelis/hideshow-org")

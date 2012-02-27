@@ -1,10 +1,10 @@
 (:name django-mode
        :description "Major mode for Django web framework."
-       :type git
-       :url "https://github.com/myfreeweb/django-mode.git"
+       :type github
+       :pkgname "myfreeweb/django-mode"
        :depends yasnippet
        :post-init
-       (lambda ()
+       (progn
          ;; Load yasnippet because yas/load-directory has no autoload
          (require 'yasnippet)
 	 (yas/load-directory (expand-file-name "snippets"))
