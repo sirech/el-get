@@ -48,53 +48,11 @@
       package-name
     (intern (format ":%s" package-name))))
 
-(defun el-get-pp-status-alist-to-string (object)
-  (with-temp-buffer
-    (lisp-mode-variables nil)
-    (set-syntax-table emacs-lisp-mode-syntax-table)
-    (let ((print-escape-newlines pp-escape-newlines)
-          (print-quoted t))
-      (prin1 object (current-buffer)))
-    (goto-char (point-min))
-    ;; Each (apparently-infinite) loop constantly moves forward
-    ;; through the element it is processing (via `down-list`,
-    ;; `up-list`, and `forward-sexp` and finally throws a scan-error
-    ;; when it reaches the end of the element, which breaks out of the
-    ;; loop and is caught by `condition-case`.
-    (condition-case err
-        ;; Descend into status list
-        (progn
-          (down-list 1)
-          (while t
-            ;; Descend into recipe
-            (down-list 2)
-            ;; Put a newline after each property value (except the
-            ;; last one)
-            (condition-case err
-                (while t
-                  ;; We want to move forward by 2 sexps, but we also
-                  ;; want to make sure that there's another sexp after
-                  ;; point before inserting a newline. Thus we go
-                  ;; forward 3 and then back 1.
-                  (forward-sexp 3)
-                  (backward-sexp 1)
-                  (delete-region (point) (progn (skip-chars-backward " \t\n") (point)))
-                  (insert ?\n))
-              (scan-error nil))
-            ;; Exit from status entry for this package
-            (up-list 2)))
-      (scan-error nil))
-    (pp-buffer)
-    (goto-char (point-min))
-    ;; Make sure we didn't change the value. That would be bad.
-    (assert (equal object (read (current-buffer))) nil
-            "Pretty-printing status changes its value. Your pretty-printing function is messed up.")
-    (buffer-string)))
-
 (defun el-get-save-package-status (package status)
   "Save given package status"
   (let* ((package (el-get-as-symbol package))
-         (recipe (el-get-package-def package))
+         (recipe (when (string= status "installed")
+                   (el-get-package-def package)))
          (package-status-alist
           (assq-delete-all package (el-get-read-status-file)))
          (new-package-status-alist
@@ -103,9 +61,10 @@
                          (cons package (list 'status status 'recipe recipe))))
                 (lambda (p1 p2)
                   (string< (el-get-as-string (car p1))
-                           (el-get-as-string (car p2)))))))
+                           (el-get-as-string (car p2))))))
+         print-level print-length)
     (with-temp-file el-get-status-file
-      (insert (el-get-pp-status-alist-to-string new-package-status-alist)))
+      (insert (el-get-print-to-string new-package-status-alist 'pretty)))
     ;; Return the new alist
     new-package-status-alist))
 
@@ -121,10 +80,12 @@
         ps
       ;; convert to the new format, fetching recipes as we go
       (loop for (p s) on ps by 'cddr
-            for x = (el-get-package-symbol p)
-            when x
-            collect (cons x (list 'status s
-                                  'recipe (el-get-package-def x)))))))
+            for psym = (el-get-package-symbol p)
+            when psym
+            collect (cons psym
+                          (list 'status s
+                                'recipe (when (string= s "installed")
+                                          (el-get-package-def psym))))))))
 
 (defun el-get-package-status-alist (&optional package-status-alist)
   "return an alist of (PACKAGE . STATUS)"
@@ -136,6 +97,7 @@
   "return the list of recipes stored in the status file"
   (loop for (p . prop) in (or package-status-alist
                               (el-get-read-status-file))
+        when (string= (plist-get prop 'status) "installed")
         collect (plist-get prop 'recipe)))
 
 (defun el-get-read-package-status (package &optional package-status-alist)
@@ -146,7 +108,7 @@
 (define-obsolete-function-alias 'el-get-package-status 'el-get-read-package-status)
 
 (defun el-get-read-package-status-recipe (package &optional package-status-alist)
-  "return current status for PACKAGE"
+  "return current status recipe for PACKAGE"
   (let ((p-alist (or package-status-alist (el-get-read-status-file))))
     (plist-get (cdr (assq (el-get-as-symbol package) p-alist)) 'recipe)))
 
