@@ -75,25 +75,39 @@ File: el-get.info,  Node: Acknowledgments,  Next: Glossary,  Prev: Introduction,
 2 Acknowledgments
 *****************
 
-Dimitri Fontaine start the whole project and still manage the releases,
-and sometimes even contribute code and documentation.
+Dimitri Fontaine started the whole project and still manages the
+releases, and sometimes even contribute code and documentation.
 
    Julien Danjou has been a contributor since very early days, about the
 first beta tester of the idea, before we really knew how much to
 achieve.
 
-   Ryan Thompson joined and commented some issues, began contributing
-and quickly became top-level and most active contributor to the project,
-getting a commit bit and some management duties. He manages tests and
-issues on github as much as he can spares time to el-get.
+   Ryan C. Thompson joined and commented some issues, began contributing
+and quickly became top-level and most active contributor to the
+project, getting a commit bit and some management duties. He manages
+tests and issues on github as much as he can spares time to El-Get.
 
    Dave Abrahams contributed lots of code and efforts to make things
 right™. He's still using El-Get, but decided to retire from the
 project.
 
-   Lots of people (more than we can list here) did contribute to el-get
+   Lots of people (more than we can list here) did contribute to El-Get
 either recipes, bug fixes or ideas to implement, often with code. That
 builds up an awesome community, thanks guys!
+
+     dim ~/dev/emacs/el-get git --no-pager shortlog -n -s | wc -l
+          137
+     dim ~/dev/emacs/el-get git --no-pager shortlog -n -s | head -10
+        734	Dimitri Fontaine
+        336	Ryan C. Thompson
+        114	Julien Danjou
+        110	Dave Abrahams
+         73	Ryan Thompson
+         72	Sébastien Gross
+         42	Takafumi Arakaki
+         27	Alex Ott
+         25	Yakkala Yagnesh Raghava
+         21	Rüdiger Sonderfeld
 
 
 File: el-get.info,  Node: Glossary,  Next: Installing,  Prev: Acknowledgments,  Up: Top
@@ -392,16 +406,10 @@ concurrently, in the background.
    When SYNC is `sync', each package will be installed synchronously,
 and any error will stop it all.
 
-   When SYNC is `wait', then `el-get' will enter a wait-loop and only
-let you use Emacs once it has finished with its job. That's useful an
-option to use in your *Note user-init-file: (emacs)user-init-file. Note
-that each package in the list gets installed in parallel with this
-option.
-
    Please note that the `el-get-init' part of `el-get' is always done
-synchronously, so you will have to wait here. There's `byte-compile'
-support though, and the packages you use are welcome to use `autoload'
-too.
+synchronously. There's `byte-compile' support though, and the packages
+you use are welcome to use `autoload' too. You can also force your
+setup to be loaded lazily with the `el-get-is-lazy' variable.
 
    `PACKAGES' is expected to be a list of packages you want to install
 or init.  When `PACKAGES' is omited (the default), the list of already
@@ -415,9 +423,9 @@ File: el-get.info,  Node: Distributed Setup,  Next: Setup Customization,  Prev: 
 
 When you are sharing your emacs setup between several machines (work
 and home destops, laptop, etc); it's usual to manage your `.emacs.d'
-setup in a distributed repository (such as `git'). El-Get then provide
-and easy canonical list of packages you depend on to run emacs, and
-this documentation is usable as-is.
+setup in a distributed repository (such as `git'). El-Get then provides
+an easy canonical list of packages you depend on to run emacs, and this
+documentation is usable as-is.
 
      (add-to-list 'load-path "~/.emacs.d/el-get/el-get")
      (require 'el-get)
@@ -446,6 +454,20 @@ this documentation is usable as-is.
             '(cssh el-get switch-window vkill google-maps nxhtml xcscope yasnippet)
             (mapcar 'el-get-source-name el-get-sources)))
 
+     (el-get 'sync my-packages)
+
+   Please note that when you unreference a package from `my-packages',
+it remains locally installed.
+
+   Going one step further with the idea of a canonical list, el-get
+provides the command `el-get-cleanup', which will remove all packages
+absent from `my-packages'. This allows, in effect, to put under version
+control only the user init file, instead of the whole `.emacs.d'
+directory, and still enjoy a truly portable emacs configuration.
+
+   In the code example above, replace the last line with the following:
+
+     (el-get-cleanup my-packages)
      (el-get 'sync my-packages)
 
 
@@ -580,6 +602,7 @@ variable EL-GET-SOURCES.
 
 * Organizing recipes::
 * Getting more recipes::
+* Overriding package files::
 
 
 File: el-get.info,  Node: Organizing recipes,  Next: Getting more recipes,  Up: Recipes
@@ -617,7 +640,7 @@ matching `el-get-sources' stanza.
    El-Get also supports full User Init files, see *Note User Init::.
 
 
-File: el-get.info,  Node: Getting more recipes,  Prev: Organizing recipes,  Up: Recipes
+File: el-get.info,  Node: Getting more recipes,  Next: Overriding package files,  Prev: Organizing recipes,  Up: Recipes
 
 8.2 Getting more recipes
 ========================
@@ -631,6 +654,17 @@ you often have to add some initialisation code. See *Note User Init::.
    The command `el-get-elpa-build-local-recipes' downloads the list of
 Emacs Lisp Packages from the ELPA archives you have setup, and make
 them automatically available for El-Get.
+
+
+File: el-get.info,  Node: Overriding package files,  Prev: Getting more recipes,  Up: Recipes
+
+8.3 Overriding package files
+============================
+
+El-Get manages the files associated with a package. You can browse
+those files using the `el-get-cd' function. It's possible to hack on
+those files, be aware that doing so might break your setup capability
+to handle upgrades.
 
 
 File: el-get.info,  Node: Authoring Recipes,  Prev: Recipes,  Up: Top
@@ -753,32 +787,33 @@ Tag Table:
 Node: Top762
 Node: Introduction1227
 Node: Acknowledgments2302
-Node: Glossary3313
-Ref: Glossary - Init4409
-Ref: Glossary - Install4711
-Ref: Glossary - Recipe5798
-Ref: Glossary - Status6222
-Ref: Glossary - Update6480
-Node: Installing6718
-Node: Install the developper version7591
-Node: Skip Emacswiki recipes when installing8336
-Node: Usage9172
-Node: Setup11461
-Node: Basic Setup11857
-Node: The el-get function13096
-Node: Distributed Setup14605
-Node: Setup Customization15916
-Node: User Init17062
-Node: Before and After properties17749
-Node: Initialization files19257
-Node: Recipes19910
-Node: Organizing recipes20356
-Node: Getting more recipes21871
-Node: Authoring Recipes22536
-Node: Recipe format22967
-Node: Dependencies23636
-Node: Byte Compilation23982
-Node: Autoloads24548
-Node: Build25674
+Node: Glossary3752
+Ref: Glossary - Init4848
+Ref: Glossary - Install5150
+Ref: Glossary - Recipe6237
+Ref: Glossary - Status6661
+Ref: Glossary - Update6919
+Node: Installing7157
+Node: Install the developper version8030
+Node: Skip Emacswiki recipes when installing8775
+Node: Usage9611
+Node: Setup11900
+Node: Basic Setup12296
+Node: The el-get function13535
+Node: Distributed Setup14811
+Node: Setup Customization16705
+Node: User Init17851
+Node: Before and After properties18538
+Node: Initialization files20046
+Node: Recipes20699
+Node: Organizing recipes21174
+Node: Getting more recipes22689
+Node: Overriding package files23387
+Node: Authoring Recipes23770
+Node: Recipe format24201
+Node: Dependencies24870
+Node: Byte Compilation25216
+Node: Autoloads25782
+Node: Build26908
 
 End Tag Table

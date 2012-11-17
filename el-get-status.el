@@ -31,7 +31,7 @@
          (symbol-name package-symbol))
         ((stringp package-symbol)
          package-symbol)
-        (t (error "Unknown package: %s"))))
+        (t (error "Unknown package: %s" package-symbol))))
 
 (defun el-get-package-symbol (package)
   "Returns a package name as a non-keyword symbol"
@@ -40,7 +40,7 @@
         ((symbolp package)
          package)
         ((stringp package) (intern package))
-        (t (error "Unknown package: %s"))))
+        (t (error "Unknown package: %s" package))))
 
 (defun el-get-package-keyword (package-name)
   "Returns a package name as a keyword :package."
@@ -68,6 +68,8 @@
             "Recipe must be a list")
     (with-temp-file el-get-status-file
       (insert (el-get-print-to-string new-package-status-alist 'pretty)))
+    ;; Update cache
+    (setq el-get-status-cache new-package-status-alist)
     ;; Return the new alist
     new-package-status-alist))
 
@@ -90,9 +92,21 @@
                                 ;; just provide a placeholder no-op recipe.
                                 (error `(:name ,psym :type builtin))))))))
 
+(defvar el-get-status-cache nil
+  "Cache used by `el-get-read-status-file'.")
+
+(defun el-get-clear-status-cache ()
+  "Clear in-memory cache for status file."
+  (setq el-get-status-cache nil))
+
 (defun el-get-read-status-file ()
   "read `el-get-status-file' and return an alist of plist like:
    (PACKAGE . (status \"status\" recipe (:name ...)))"
+  (or el-get-status-cache
+      (setq el-get-status-cache (el-get-read-status-file-force))))
+
+(defun el-get-read-status-file-force ()
+  "Forcefully load status file."
   (let* ((ps
           (when (file-exists-p el-get-status-file)
             (car (with-temp-buffer
@@ -196,59 +210,57 @@ If PACKAGE-STATUS-ALIST is nil, read recipes from status file."
     :load
     :features
     :library
+    :prepare
     :before
     :after
-    :lazy)
-  "Whitelist of properties that may be updated in cached recipes.
+    :post-init
+    :lazy
+    :website
+    :description)
+  "Properties that can be updated without `el-get-update'/`el-get-reinstall'.
 
 If any of these properties change on the recipe for an installed
 package, the changes may be merged into the cached version of
 that recipe in the el-get status file.")
 
-(defun el-get-merge-whitelisted-properties (source newprops)
-  "Merge NEWPROPS into SOURCE if they are all whitelisted.
+(defun el-get-classify-new-properties (source newprops)
+  "Classify NEWPROPS into two groups: need update/disallowed.
 
-SOURCE should be an el-get package recipe, and NEWPROPS should be
-a plist to be merged with it (possibly a full recipe, but not
-necessarily). Every property in NEWPROPS that must either be
-whitelisted or must be identical to the corresponding property in
-SOURCE.
+Return a list (UPDATE DISALLOWED).  Both UPDATE and NEWPROPS are
+subset of NEWPROPS whose element is different from SOURCE.
+Elements in UPDATE are whitelisted whereas elements in DISALLOWED
+are not."
+  (loop with update
+        with disallowed
+        with whitelist = el-get-status-recipe-update-whitelist
+        for (k v) on newprops by 'cddr
+        ;; Not a change, so ignore it
+        if (equal v (plist-get source k)) do (ignore)
+        ;; whitelisted
+        else if (memq k whitelist) do (setq update (plist-put update k v))
+        ;; Trying to change non-whitelisted property
+        else do (setq disallowed (plist-put disallowed k v))
+        finally return (list update disallowed)))
 
-Returns the merged source without modifying the original.
+(defun el-get-diagnosis-properties (old-source new-source)
+  "Diagnosis difference between OLD-SOURCE and NEW-SOURCE.
 
-To see which properties are whitelisted, see
-`el-get-status-recipe-update-whitelist'."
-  (let* ((whitelist el-get-status-recipe-update-whitelist)
-        (updated-source (copy-list source))
-        (disallowed-props
-         (loop for (k v) on newprops by 'cddr
-               ;; whitelisted
-               if (memq k whitelist) do (plist-put updated-source k v)
-               ;; Not a change, so ignore it
-               else if (equal v (plist-get source k)) do (ignore)
-               ;; Trying to change non-whitelisted property
-               else append (list k v))))
-    ;; Raise an error if we tried to set any disallowed
-    ;; properties. (We wait until now so we can report the full list.)
-    (when disallowed-props
-      (error (format "Tried to merge non-whitelisted properties:
-
-%s
-into source:
-
-%s
-Maybe you should use `el-get-update' or `el-get-reinstall' on %s instead?"
-                     (pp-to-string disallowed-props)
-                     (pp-to-string source)
-                     (el-get-source-name source))))
-    updated-source))
+Return a list (UPDATE-P ADDED-DISALLOWED REMOVED-DISALLOWED).
+UPDATE-P is non-nil when OLD-SOURCE and NEW-SOURCE are different.
+ADDED-DISALLOWED and REMOVED-DISALLOWED are added and removed
+properties, respectively."
+  (let ((added   (el-get-classify-new-properties old-source new-source))
+        (removed (el-get-classify-new-properties new-source old-source)))
+    (list (or (car added) (car removed))
+          (cadr added)
+          (cadr removed))))
 
 (defun* el-get-merge-properties-into-status (package-or-source
                                              &optional package-status-alist
-                                             &key noerror skip-non-updatable)
-  "Merge updatable properties for package into pacakge status alist (or status file).
+                                             &key noerror)
+  "Merge updatable properties for package into package status alist (or status file).
 
-The first argument is either a package source or a pacakge name,
+The first argument is either a package source or a package name,
 in which case the source will be read using
 `el-get-package-def'. The named package must already be
 installed.
@@ -264,11 +276,7 @@ saved to the status file.
 
 If any non-whitelisted properties differ from the cached values,
 then an error is raise. With optional keyword argument `:noerror
-t', this error is suppressed (but nothing is updated). With
-optional keyword argument `:skip-non-updatable t', the
-whitelisted recipe changes will be merged despite the presence of
-non-whitelisted changes, and no error will be raised.
-"
+t', this error is suppressed (but nothing is updated)."
   (interactive
    (list (el-get-read-package-with-status "Update cached recipe" "installed")
          nil
@@ -287,28 +295,33 @@ non-whitelisted changes, and no error will be raised.
                                    package))))
     (unless (el-get-package-is-installed package)
       (error "Package %s is not installed. Cannot update recipe." package))
-    (when skip-non-updatable
-      ;; Filter out non-whitelisted properties now to avoid the error
-      ;; later.
-      (setq source
-            (loop for (k v) on source by 'cddr
-                  when (memq k el-get-status-recipe-update-whitelist)
-                  append (list k v))))
-    (let ((merged-recipe
-           (condition-case err
-               (el-get-merge-whitelisted-properties cached-recipe source)
-             ;; Convert the error to a verbose message if `noerror' is
-             ;; t (but still quit the function).
-             (error
-              (progn
-                (apply (if noerror 'el-get-verbose-message 'error)
-                       (cdr err))
-                ;; Return from the function even if no error was thrown
-                (return-from el-get-merge-properties-into-status)))
-             )))
-      (if save-to-file
-          (el-get-save-package-status package "installed" merged-recipe)
-        (plist-put (cdr (assq package package-status-alist))
-                   'recipe merged-recipe)))))
+    (destructuring-bind (update-p added-disallowed removed-disallowed)
+        (el-get-diagnosis-properties cached-recipe source)
+      (when (or added-disallowed removed-disallowed)
+        ;; Emit a verbose message if `noerror' is t (but still quit
+        ;; the function).
+        (funcall (if noerror 'el-get-verbose-message 'error)
+                 "Tried to add non-whitelisted properties:
+
+%s
+
+and remove non-whitelisted properties:
+
+%s
+
+into/from source:
+
+%s
+Maybe you should use `el-get-update' or `el-get-reinstall' on %s instead?"
+                 (if   added-disallowed (pp-to-string   added-disallowed) "()")
+                 (if removed-disallowed (pp-to-string removed-disallowed) "()")
+                 (pp-to-string cached-recipe)
+                 (el-get-source-name cached-recipe))
+        (return-from el-get-merge-properties-into-status))
+      (when update-p
+        (if save-to-file
+            (el-get-save-package-status package "installed" source)
+          (plist-put (cdr (assq package package-status-alist))
+                     'recipe source))))))
 
 (provide 'el-get-status)
