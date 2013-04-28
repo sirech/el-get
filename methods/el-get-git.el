@@ -10,7 +10,7 @@
 ;; This file is NOT part of GNU Emacs.
 ;;
 ;; Install
-;;     Please see the README.asciidoc file from the same distribution
+;;     Please see the README.md file from the same distribution
 
 (require 'el-get-core)
 
@@ -51,8 +51,9 @@ found."
                                     (not submodule-prop)))
          (checkout (or (plist-get source :checkout)
 		       (plist-get source :checksum)))
-         (shallow (el-get-plist-get-with-default source :shallow
-                                                 el-get-git-shallow-clone))
+         (shallow (unless (string-prefix-p "http" url)
+                    (el-get-plist-get-with-default source :shallow
+                                                   el-get-git-shallow-clone)))
 	 (clone-args (append '("--no-pager" "clone")
                              (when shallow '("--depth" "1"))
 			     (cond

@@ -10,7 +10,7 @@
 ;; This file is NOT part of GNU Emacs.
 ;;
 ;; Install
-;;     Please see the README.asciidoc file from the same distribution
+;;     Please see the README.md file from the same distribution
 
 (require 'el-get-core)
 (require 'sha1)
@@ -32,6 +32,8 @@ Test url: http://repo.or.cz/w/ShellArchive.git?a=blob_plain;hb=HEAD;f=ack.el"
 
 (defun el-get-http-retrieve-callback (status package post-install-fun &optional dest sources)
   "Callback function for `url-retrieve', store the emacs lisp file for the package."
+  (let ((err (plist-get status :error)))
+    (when err (error (format "could not fetch URL: error %s %s" (car (cdr err)) (cdr (cdr err))))))
   (let* ((pdir   (el-get-package-directory package))
 	 (dest   (or dest (format "%s%s.el" (file-name-as-directory pdir) package)))
 	 (part   (concat dest ".part"))
@@ -40,10 +42,8 @@ Test url: http://repo.or.cz/w/ShellArchive.git?a=blob_plain;hb=HEAD;f=ack.el"
 	 (require-final-newline nil))
     ;; prune HTTP headers before save
     (goto-char (point-min))
-    (re-search-forward "^$" nil 'move)
-    (forward-char)
-    (delete-region (point-min) (point))
-    (write-file part)
+    (re-search-forward "\r?\n\r?\n")
+    (write-region (point) (point-max) part)
     (puthash package (sha1 (current-buffer)) el-get-http-checksums)
     (when (file-exists-p dest)
       (delete-file dest))

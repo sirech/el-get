@@ -10,7 +10,7 @@
 ;; This file is NOT part of GNU Emacs.
 ;;
 ;; Install
-;;     Please see the README.asciidoc file from the same distribution
+;;     Please see the README.md file from the same distribution
 
 ;;; Commentary:
 ;;
@@ -87,9 +87,9 @@ definition provided by `el-get' recipes locally.
 
 :builtin
 
-    Emacs major version (see `emacs-major-version' variable) from
-    which Emacs includes the recipe as a builtin.  For example,
-    `package.el' (the implementation of ELPA) is part fo Emacs24
+    A string containing the Emacs version (see `emacs-version' variable)
+    from which Emacs includes the recipe as a builtin.  For example,
+    `package.el' (the implementation of ELPA) is part of Emacs 24
     but needs an external recipe for previous major versions.
 
 :pkgname
