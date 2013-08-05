@@ -37,7 +37,7 @@
   :type 'directory)
 
 
-(defcustom el-get-recipe-path
+(defvar el-get-recipe-path
   (list (concat (file-name-directory el-get-script) "recipes")
         el-get-recipe-path-elpa
         el-get-recipe-path-emacswiki)
@@ -45,9 +45,14 @@
 
 Directories that contain automatically-generated recipes, such as
 `el-get-recipe-path-emacswiki' and `el-get-recipe-path-elpa',
-should be placed last in this list."
-  :group 'el-get
-  :type '(repeat (directory)))
+should be placed last in this list.
+
+This variable is not customizable, as it needs to be set before
+el-get is loaded, while customizations should be loaded after
+el-get, so that they can affect pacakages loaded by el-get.
+It is recommended to add new directories using code like:
+
+  (add-to-list 'el-get-recipe-path \"~/.emacs.d/el-get-user/recipes/\")")
 
 (defcustom el-get-user-package-directory nil
   "Define where to look for init-pkgname.el configurations. Disabled if nil."
@@ -144,7 +149,7 @@ in `el-get-recipe-path' in order."
     (append
      el-get-sources
      (remove-if (lambda (recipe) (member (el-get-source-name recipe) packages))
-                (el-get-read-all-recipe-files)))))
+                (remove-if 'null (el-get-read-all-recipe-files))))))
 
 (defun el-get-package-def (package)
   "Return a single `el-get-sources' entry for PACKAGE."
