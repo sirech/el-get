@@ -199,10 +199,10 @@ definition provided by `el-get' recipes locally.
 
 :library
 
-    When using :after but not using :features, :library allows to
-    set the library against which to register the :after function
-    against `eval-after-load'.  It defaults to either :pkgname
-    or :package, in this order.  See also `el-get-eval-after-load'.
+    When lazy, :library sets the file against which to register
+    the :after and :post-init forms for `eval-after-load'.  It
+    defaults to the first :feature, :pkgname or :package, in that
+    order.  See also `el-get-eval-after-load'.
 
 :options
 
@@ -245,12 +245,11 @@ definition provided by `el-get' recipes locally.
 
 :post-init
 
-    This should be a lisp form to evaluate after loading the
-    package.  Intended for use from recipes.  This function is
-    registered for `eval-after-load' against the recipe library
-    by `el-get-init' once the :load and :features have been
-    setup.  Like `:prepare', it will be run with
-    `default-directory' set to the package directory.
+    Intended for use from recipes.  This should be a lisp form to
+    evaluate once the :load and :features have been setup.  When
+    lazy, it will be registered for `eval-after-load' against the
+    recipe :library instead.  Like `:prepare', it will be run
+    with `default-directory' set to the package directory.
 
 :after
 
@@ -406,6 +405,25 @@ this is the name to fetch in that system"
                 :tag "Relative paths to force-load" string)))
        (group :inline t :format "Options (`http-tar' and `cvs' only): %v"
               (const :format "" :options) (string :format "%v"))
+       (group
+        :inline t :format "%t: %v%h"
+        :tag "Checksum"
+        :doc "Used to verify downloaded package
+ (SHA1 in hex for `http', `ftp' and `emacswiki')"
+        (const :format "" :checksum) (string :format "%v"))
+       (group
+        :inline t :format "%t: %v"
+        :tag "Checkout this `git' revision"
+        (const :format "" :checkout) (string :format "%v"))
+       (group
+        :inline t :format "%t: %v%h"
+        :tag "Shallow clone"
+        :doc "git-clone with `--depth 1'"
+        (const :format "" :shallow) (boolean :format "%[Toggle%] %v\n"))
+       (group
+        :inline t :format "%t: %v" :value (:submodule t)
+        :tag "Update submodules (`git' only)"
+        (const :format "" :submodule) (boolean :format "%[Toggle%] %v\n"))
        (group :inline t :format "CVS Module: %v"
               (const :format "" :module)
               (string :format "%v"))
@@ -430,7 +448,6 @@ this is the name to fetch in that system"
        (group :inline t
               :format "`After' Function (`Post-Init' recommended instead): %v"
               (const :format "" :after) (function :format "%v"))
-       ;; TODO: `:checksum', `:checkout', `:shallow'
        )
       (repeat
        :inline t :tag "System-Specific Build Recipes"
