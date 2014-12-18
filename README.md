@@ -1,6 +1,8 @@
+[![Build Status](https://travis-ci.org/dimitri/el-get.svg?branch=master)](https://travis-ci.org/dimitri/el-get)
+
 ![Color El-Get logo](https://raw.github.com/dimitri/el-get/master/logo/el-get.png)
 El-Get allows you to install and manage `elisp` code for Emacs. It supports
-lots of differents types of sources and is able to *install* them, *update*
+lots of different types of sources and is able to *install* them, *update*
 them and *remove* them, but more importantly it will *init* them for you.
 That means it will `require` the *features* you need, `load` the necessary
 files, set the *Info* paths so that `C-h i` shows the new documentation you
@@ -17,7 +19,7 @@ apply your configuration to.
 
 All of these systems require some degree of manual maintenance, especially
 if you have packages from various types of locations:
-[github](http://github.com), [emacswiki](http://emacswiki.org),
+[github](https://github.com), [emacswiki](http://emacswiki.org),
 [GNU ELPA](http://elpa.gnu.org/) or [Marmalade](http://marmalade-repo.org/),
 privately hosted pages, [git](http://git-scm.com/),
 [bzr](http://bazaar.canonical.com/en/), [CVS](http://www.nongnu.org/cvs/),
@@ -54,7 +56,7 @@ packages providing some.
 # Installation
 
 El-Get is easy to install.  The only requirements to do so successfully are
-Emacs, `git` and a connection to the internet that allows you to `git clone`
+Emacs (23.4 and above), `git` and a connection to the internet that allows you to `git clone`
 repositories.
 
 If you do not already have `git` on your system, you can install it through
@@ -86,7 +88,7 @@ To install El-Get you can use the *lazy-installer*.  This will not load it
 on startup or otherwise affect future usage of Emacs.  If you wish to ensure
 that El-Get will be available in future Emacs session please use the code
 provided in **Basic Setup**.  Using the code below will require an internet
-connection even if El-Get is already installed, that's why it's adviced to
+connection even if El-Get is already installed, that's why it's advised to
 use it for first time installation, not for embedding into your `.emacs` (or
 your `user-init-file`).
 
@@ -94,7 +96,7 @@ your `user-init-file`).
 ;; So the idea is that you copy/paste this code into your *scratch* buffer,
 ;; hit C-j, and you have a working el-get.
 (url-retrieve
- "https://raw.github.com/dimitri/el-get/master/el-get-install.el"
+ "https://raw.githubusercontent.com/dimitri/el-get/master/el-get-install.el"
  (lambda (s)
    (goto-char (point-max))
    (eval-print-last-sexp)))
@@ -104,6 +106,20 @@ Evaluating this code after copying it into your `*scratch*` buffer by typing
 `C-j` or `M-x eval-print-last-exp` will retrieve the El-Get installation
 script.  This script will then use `git` to clone El-Get and install it to
 the default location (`~/.emacs.d/el-get/el-get`).
+
+## Replicating a package set on another Emacs installation
+
+In the Emacs whose setup you wish to replicate, type `M-x ielm` for an
+Emacs Lisp prompt, and enter:
+
+```lisp
+`(setq my-packages
+              ',(mapcar #'el-get-as-symbol
+                        (el-get-list-package-names-with-status "installed")))
+```
+
+Copy the result into the new Emacs, in which you should already have
+installed El-Get, and evaluate it, followed by `(el-get 'sync my-packages)`
 
 # Setup
 
@@ -128,9 +144,27 @@ Here is the basic setup to add to your `user-init-file` (`.emacs`):
 (unless (require 'el-get nil 'noerror)
   (with-current-buffer
       (url-retrieve-synchronously
-       "https://raw.github.com/dimitri/el-get/master/el-get-install.el")
+       "https://raw.githubusercontent.com/dimitri/el-get/master/el-get-install.el")
     (goto-char (point-max))
     (eval-print-last-sexp)))
+
+(add-to-list 'el-get-recipe-path "~/.emacs.d/el-get-user/recipes")
+(el-get 'sync)
+```
+
+### Alternative Basic Setup with Installation via MELPA
+
+```elisp
+(add-to-list 'load-path "~/.emacs.d/el-get/el-get")
+
+(unless (require 'el-get nil 'noerror)
+  (require 'package)
+  (add-to-list 'package-archives
+               '("melpa" . "http://melpa.org/packages/"))
+  (package-refresh-contents)
+  (package-initialize)
+  (package-install 'el-get)
+  (require 'el-get))
 
 (add-to-list 'el-get-recipe-path "~/.emacs.d/el-get-user/recipes")
 (el-get 'sync)
@@ -146,6 +180,8 @@ for it, like for example `~/.emacs.d/el-get-init-files/`).
 
 El-Get will then load that file at package initialization time. See the full
 *Info* documentation for more details and possibilities.
+
+Many `init-` packages are already available in El-Get.
 
 # Usage
 

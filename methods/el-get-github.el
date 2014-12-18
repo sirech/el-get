@@ -22,7 +22,7 @@
         'ssh "git@github.com:%USER%/%REPO%.git")
   "Plist mapping Github types to their URL format strings.")
 
-(defcustom el-get-github-default-url-type 'http
+(defcustom el-get-github-default-url-type 'https
   "The kind of URL to use for Github repositories.
 
 Choices are `http', `https', `git'. This is effectively the
@@ -52,8 +52,8 @@ FROM is a literal string, not a regexp."
                      package)))
          (user-and-repo (split-string user-slash-repo "/" 'omit-nulls)))
     (assert (= (length user-and-repo) 2) nil
-              "Github pkgname %s must be of the form username/reponame"
-                user-slash-repo)
+            "Github pkgname %s must be of the form username/reponame"
+            user-slash-repo)
     (cons (first user-and-repo) (second user-and-repo))))
 
 (defun el-get-github-url-private (url-type username reponame)
@@ -80,9 +80,9 @@ USERNAME and REPONAME are strings."
 
 (defun el-get-github-clone (package url post-install-fun)
   "Clone the given package from Github following the URL."
-  (el-get-git-clone package
-                    (or url (el-get-github-url package))
-                    post-install-fun))
+  (let ((url (or url (el-get-github-url package))))
+    (el-get-insecure-check package url)
+    (el-get-git-clone package url post-install-fun)))
 
 (defun el-get-github-guess-website (package)
   (let* ((user-and-repo (el-get-github-parse-user-and-repo package))

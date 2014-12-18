@@ -29,20 +29,21 @@
          (pkgname (el-get-as-string (plist-get source :pkgname)))
          (pdir (el-get-package-directory package))
          (name (format "*go get %s*" package))
-	 (ok   (format "Package %s installed." package))
-	 (ko   (format "Could not install package %s." package)))
+         (ok   (format "Package %s installed." package))
+         (ko   (format "Could not install package %s." package)))
+    ;; TODO: no idea how to check this for insecure connections
     (unless (file-directory-p pdir)
       (make-directory pdir))
     (setenv "GOPATH" pdir)
     (el-get-start-process-list
      package
      `((:command-name ,name
-		      :buffer-name ,name
+                      :buffer-name ,name
                       :default-directory ,el-get-dir
-		      :program ,el-get-go
-		      :args ("get" "-v" "-u" ,pkgname)
-		      :message ,ok
-		      :error ,ko))
+                      :program ,el-get-go
+                      :args ("get" "-v" "-u" ,pkgname)
+                      :message ,ok
+                      :error ,ko))
      post-install-fun)
     (setenv "GOPATH" gopath)))
 
@@ -50,6 +51,6 @@
   :install #'el-get-go-install
   :update #'el-get-go-install
   :remove #'el-get-rmdir
-  :install-hook #'el-get-go-install-hook)
+  :install-hook 'el-get-go-install-hook)
 
 (provide 'el-get-go)
