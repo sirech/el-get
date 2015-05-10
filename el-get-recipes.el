@@ -96,6 +96,30 @@ Used to avoid errors when exploring the path for recipes"
 ;;
 ;; recipes
 ;;
+
+(defun el-get-recipe-pprint (source)
+  "Pretty print a recipe definition to current buffer."
+  (if (eq major-mode 'emacs-lisp-mode)
+      (let ((point (point)))
+        (insert "(")
+        ;; Standard Emacs pretty print functions don't put newlines after
+        ;; prop val pairs of plists, so we have to do it ourselves.
+        (loop for (prop val) on source by #'cddr
+              do (insert (format "%S %S\n" prop val)))
+        (delete-char -1)                ; delete last \n
+        (insert ")\n")
+        (goto-char point)
+        (indent-pp-sexp 'pretty))
+    (let ((temp-buffer (generate-new-buffer " *temp*")))
+      (unwind-protect
+          (progn
+            (save-current-buffer
+              (set-buffer temp-buffer)
+              (emacs-lisp-mode)
+              (el-get-recipe-pprint source))
+            (insert-buffer-substring temp-buffer))
+        (kill-buffer temp-buffer)))))
+
 (defun el-get-read-recipe-file (filename)
   "Read given FILENAME and return its content (a valid form is expected)."
   (condition-case err
@@ -240,6 +264,26 @@ which defaults to installed, required and removed.  Example:
     (el-get-plist-get-with-default
         def :minimum-emacs-version
       0)))
+
+(defun el-get-package-effective-library (package-or-source)
+  "Return the effective :library of PACKAGE-OR-SOURCE.
+
+See `el-get-sources' for details."
+  (let* ((source   (if (or (symbolp package-or-source) (stringp package-or-source))
+                       (el-get-package-def package-or-source)
+                     package-or-source))
+         (package  (if (or (symbolp package-or-source) (stringp package-or-source))
+                       (el-get-as-symbol package-or-source)
+                     (plist-get source :name)))
+         (pkgname  (plist-get source :pkgname))
+         (feats    (el-get-as-list (plist-get source :features))))
+    (or (plist-get source :library)
+        (car feats)
+        (if (memq (el-get-package-method source)
+                  '(github emacsmirror github-tar github-zip))
+            (cdr (el-get-github-parse-user-and-repo package))
+          pkgname)
+        package)))
 
 (defun el-get-version-to-list (version)
   "Convert VERSION to a standard version list.
@@ -412,6 +456,14 @@ FILENAME defaults to `buffer-file-name'."
                  (el-get-check-warning :warning
                    "Property %S is for user.  Use %S instead."
                    key alt)
+                 (incf numerror)))
+      ;; Check for misformatted plists
+      (loop for key in recipe by #'cddr
+            unless (keywordp key)
+            do (progn
+                 (el-get-check-warning :warning
+                   "Property %S is not a keyword!"
+                   key)
                  (incf numerror)))
       (destructuring-bind (&key type url autoloads feats builtin
                                 &allow-other-keys)

@@ -191,6 +191,12 @@
 (require 'el-get-list-packages)         ; menu and `el-get-describe' facilities
 (require 'el-get-autoloading)           ; manages updating el-get's loaddefs.el
 
+;; optional features
+(let* ((el-get-dir (file-name-directory load-file-name))
+       (bundle (expand-file-name "el-get-bundle" el-get-dir)))
+  (autoload 'el-get-bundle-el-get bundle)
+  (autoload 'el-get-bundle bundle nil nil 'macro)
+  (autoload 'el-get-bundle! bundle nil nil 'macro))
 
 (defvar el-get-next-packages nil
   "List of packages to install next, used when dealing with dependencies.")
@@ -279,13 +285,7 @@ which defaults to the first element in `el-get-recipe-path'."
 (defun el-get-eval-after-load (package form)
   "Like `eval-after-load', but first arg is an el-get package name."
   (let* ((package  (el-get-as-symbol package))
-         (source   (el-get-package-def package))
-         (pkgname  (plist-get source :pkgname))
-         (feats    (el-get-as-list (plist-get source :features)))
-         (library  (or (plist-get source :library)
-                       (car feats)
-                       pkgname
-                       package)))
+         (library  (el-get-package-effective-library package)))
     (el-get-verbose-message "Using library `%s' for `eval-after-load' for package `%s'"
                             library package)
     (eval-after-load (el-get-as-string library) form)))
@@ -351,7 +351,7 @@ which defaults to the first element in `el-get-recipe-path'."
 (defvar el-get-activated-list nil
   "List of packages initialized by el-get.")
 
-(defun el-get-init (package &optional package-status-alist)
+(defun el-get-init (package)
   "Make the named PACKAGE available for use, first initializing any
    dependency of the PACKAGE."
   (interactive (progn
@@ -369,6 +369,7 @@ Add PACKAGE's directory (or `:load-path' if specified) to the
 `load-path', add any its `:info' directory to
 `Info-directory-list', and `require' its `:features'.  Will be
 called by `el-get' (usually at startup) for each installed package."
+  (declare (advertised-calling-convention (package) "Feb 2015"))
     (let ((psym (el-get-as-symbol package)))
       (when (and (not (eq psym 'el-get)) ; el-get recipe handles reloading
                  (memq psym (bound-and-true-p package-activated-list))
@@ -382,11 +383,10 @@ this warning either uninstall one of the el-get or package.el
 version of %s, or call `el-get' before `package-initialize' to
 prevent package.el from loading it."  package package)))
   (when el-get-auto-update-cached-recipes
-    (el-get-merge-properties-into-status package package-status-alist :noerror t))
+    (el-get-merge-properties-into-status package () :noerror t))
   (condition-case err
       (let* ((el-get-sources (el-get-package-status-recipes))
-             (source
-              (el-get-read-package-status-recipe package package-status-alist))
+             (source   (el-get-read-package-status-recipe package))
              (method   (el-get-package-method source))
              (loads    (el-get-as-list (plist-get source :load)))
              (autoloads (plist-get source :autoloads))
@@ -513,16 +513,11 @@ PACKAGE may be either a string or the corresponding symbol."
   (el-get-do-init package)
   (run-hook-with-args 'el-get-post-install-hooks package))
 
-(defun el-get-post-install (package)
-  "Post install PACKAGE. This will get run by a sentinel."
-  (let* ((sync             el-get-default-process-sync)
-         (type             (el-get-package-type package))
-         (hooks            (el-get-method type :install-hook))
-         (commands         (el-get-build-commands package))
+(defun el-get-verify-checksum (package)
+  (let* ((type             (el-get-package-type package))
          (checksum         (plist-get (el-get-package-def package) :checksum))
          (compute-checksum (el-get-method type :compute-checksum)))
 
-    ;; check the checksum of the package here, as early as possible
     (when (and checksum (not compute-checksum))
       (error
        "Checksum verification of package %s is not supported with method %s."
@@ -536,7 +531,17 @@ PACKAGE may be either a string or the corresponding symbol."
               (error "Checksum verification failed. Required: \"%s\", actual: \"%s\"."
                      checksum computed))
           (el-get-verbose-message "el-get: pakage %s checksum is %s."
-                                  package computed))))
+                                  package computed))))))
+
+(defun el-get-post-install (package)
+  "Post install PACKAGE. This will get run by a sentinel."
+  (let* ((sync             el-get-default-process-sync)
+         (type             (el-get-package-type package))
+         (hooks            (el-get-method type :install-hook))
+         (commands         (el-get-build-commands package)))
+
+    ;; check the checksum of the package here, as early as possible
+    (el-get-verify-checksum package)
 
     ;; post-install is the right place to run install-hook
     (run-hook-with-args hooks package)
@@ -584,12 +589,13 @@ PACKAGE may be either a string or the corresponding symbol."
 
 (defun el-get-reload (package &optional package-status-alist)
   "Reload PACKAGE."
+  (declare (advertised-calling-convention (package) "Feb 2015"))
   (interactive
    (progn
      (el-get-clear-status-cache)
      (list (el-get-read-package-with-status "Reload" "installed"))))
   (el-get-verbose-message "el-get-reload: %s" package)
-  (el-get-with-status-sources package-status-alist
+  (el-get-with-status-sources ()
     (let* ((all-features features)
            (pdir (el-get-package-directory package))
            (package-features (el-get-package-features pdir))
@@ -613,7 +619,7 @@ PACKAGE may be either a string or the corresponding symbol."
                        (error (warn "Error while reloading file %s in package %s: %S\n\n This package may require a restart of emacs to complete the update process."
                                     file package (cdr e)))))
             ;; Redo package initialization
-            (el-get-init package package-status-alist)
+            (el-get-init package)
             ;; Reload all features provided by the package. This ensures
             ;; that autoloaded packages (which normally don't load
             ;; anything until one of their entry points is called) are
@@ -801,7 +807,7 @@ result of an actual problem."
     (run-hook-with-args 'el-get-post-remove-hooks package)))
 
 ;;;###autoload
-(defun el-get-remove (package &optional package-status-alist)
+(defun el-get-remove (package)
   "Remove any PACKAGE that is know to be installed or required."
   (interactive
    (progn
@@ -817,7 +823,7 @@ result of an actual problem."
     (let ((fallback-source
            (or (ignore-errors (el-get-package-def package))
                (list :name package :type 'builtin))))
-      (el-get-with-status-sources package-status-alist
+      (el-get-with-status-sources ()
         (let* ((source   (or (ignore-errors (el-get-package-def package))
                              fallback-source))
                ;; Put the fallback source into `el-get-sources' so that
@@ -879,13 +885,7 @@ explicitly declared in the user-init-file (.emacs)."
     (let ((filepath (format "%s/%s" dir filename)))
       (with-temp-file filepath
         (emacs-lisp-mode)
-        (insert "(")
-        (loop for (prop val) on source by #'cddr
-              do (insert (format "%S %S\n" prop val)))
-        (delete-char -1) ; delete last \n
-        (insert ")\n")
-        (goto-char (point-min))
-        (indent-pp-sexp 'pretty)))))
+        (el-get-recipe-pprint source)))))
 
 ;;;###autoload
 (defun el-get-make-recipes (&optional dir)
@@ -903,11 +903,11 @@ entry which is not a symbol and is not already a known recipe."
   (dired dir))
 
 ;;;###autoload
-(defun el-get-checksum (package &optional package-status-alist)
+(defun el-get-checksum (package)
   "Compute the checksum of the given package, and put it in the kill-ring"
   (interactive
    (list (el-get-read-package-with-status "Checksum" "installed")))
-  (el-get-with-status-sources package-status-alist
+  (el-get-with-status-sources ()
     (let* ((type             (el-get-package-type package))
            (checksum         (plist-get (el-get-package-def package) :checksum))
            (compute-checksum (el-get-method type :compute-checksum)))
@@ -964,8 +964,14 @@ considered \"required\"."
     (el-get-verbose-message "el-get-init-and-install: install %S" install-deps)
     (el-get-verbose-message "el-get-init-and-install: init %S" init-deps)
 
-    (loop for p in install-deps do (el-get-do-install p) collect p into done)
-    (loop for p in init-deps    do (el-get-do-init p)    collect p into done)
+    (loop for p in install-deps
+          when (el-get-with-errors-as-warnings (format "while installing %s: " p)
+                 (el-get-do-install p))
+          collect p into done)
+    (loop for p in init-deps
+          when (el-get-with-errors-as-warnings (format "while initializing %s: " p)
+                 (el-get-do-init p))
+          collect p into done)
     done))
 
 ;;;###autoload
